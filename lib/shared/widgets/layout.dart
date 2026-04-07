@@ -11,15 +11,6 @@ class Layout extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     return Scaffold(
       appBar: AppBar(
-        title: Row(
-          children: [
-            Image.asset(
-              "images/logo_white.png",
-              fit: BoxFit.contain,
-              height: 30,
-            ),
-          ],
-        ),
         actions: [
           IconButton(
             onPressed: () {
