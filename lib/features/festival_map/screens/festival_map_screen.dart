@@ -13,8 +13,6 @@ class FestivalMapScreen extends ConsumerStatefulWidget {
 }
 
 class _FestivalMapScreenState extends ConsumerState<FestivalMapScreen> {
-  GoogleMapController? _mapController;
-
   @override
   Widget build(BuildContext context) {
     final permission = ref.watch(locationPermissionProvider);
