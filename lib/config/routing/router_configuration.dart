@@ -1,3 +1,4 @@
+import 'package:ada_project/features/festival_map/screens/festival_map_screen.dart';
 import 'package:ada_project/features/test/screens/test_screen.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -15,7 +16,7 @@ final routerProvider = Provider<GoRouter>((ref) {
 
   return GoRouter(
     navigatorKey: _rootNavigatorKey,
-    initialLocation: '/home',
+    initialLocation: '/festival-map',
     routes: <RouteBase>[
       // GoRoute(
       //     path: '/auth',
@@ -41,9 +42,9 @@ final routerProvider = Provider<GoRouter>((ref) {
         branches: [
           StatefulShellBranch(routes: [
             GoRoute(
-              path: '/home',
-              name: 'Home',
-              builder: (context, state) => const MyApp(),
+              path: '/festival-map',
+              name: 'FestivalMap',
+              builder: (context, state) => const FestivalMapScreen(),
             ),
           ]),
           StatefulShellBranch(routes: [
