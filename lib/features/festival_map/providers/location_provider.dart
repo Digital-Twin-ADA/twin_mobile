@@ -1,7 +1,10 @@
-import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:geolocator/geolocator.dart';
+import 'package:riverpod_annotation/riverpod_annotation.dart';
 
-final locationPermissionProvider = FutureProvider<LocationPermission>((ref) async {
+part 'location_provider.g.dart';
+
+@riverpod
+Future<LocationPermission> locationPermission(Ref ref) async {
   final serviceEnabled = await Geolocator.isLocationServiceEnabled();
 
   if (!serviceEnabled) {
@@ -15,13 +18,14 @@ final locationPermissionProvider = FutureProvider<LocationPermission>((ref) asyn
   }
 
   return permission;
-});
+}
 
-final userLocationStreamProvider = StreamProvider<Position>((ref) {
+@riverpod
+Stream<Position> userLocationStream(Ref ref) {
   const settings = LocationSettings(
     accuracy: LocationAccuracy.high,
     distanceFilter: 5,
   );
 
   return Geolocator.getPositionStream(locationSettings: settings);
-});
+}

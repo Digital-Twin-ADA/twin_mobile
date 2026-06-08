@@ -31,6 +31,7 @@ dependencies:
   flutter:
     sdk: flutter
 
+  shared_preferences: ^2.5.5
   cupertino_icons: ^1.0.9
   flutter_riverpod: ^3.2.1
   riverpod_annotation: ^4.0.2
