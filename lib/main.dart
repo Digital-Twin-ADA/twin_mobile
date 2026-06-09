@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'config/routing/router_configuration.dart';
+import 'features/festival_map/providers/stage_area_provider.dart';
 import 'features/navigation/screens/home_screen.dart';
 
 void main() {
@@ -15,7 +16,10 @@ class AppWithRouterProvider extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    ref.watch(festivalAreaDataProvider);
+
     final router = ref.watch(routerProvider);
+
     return MaterialApp.router(
       routerConfig: router,
       theme: ThemeData(

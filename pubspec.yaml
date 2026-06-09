@@ -44,6 +44,7 @@ dependencies:
   im_stepper: ^1.0.1+1
   google_maps_flutter: 2.10.1
   geolocator: 13.0.4
+  intl: ^0.19.0
 
 dev_dependencies:
   build_runner: ^2.15.0

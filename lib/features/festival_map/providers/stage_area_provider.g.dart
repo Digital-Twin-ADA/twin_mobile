@@ -51,20 +51,21 @@ final class StageAreaRepositoryProvider extends $FunctionalProvider<
 }
 
 String _$stageAreaRepositoryHash() =>
-    r'dd376578d542b9be0cc8a08623f3f4910a87eb96';
+    r'cfae3713e34302141126f1f18317ef31d2f32f8c';
 
-@ProviderFor(FestivalAreaData)
-final festivalAreaDataProvider = FestivalAreaDataFamily._();
+@ProviderFor(festivalAreaData)
+final festivalAreaDataProvider = FestivalAreaDataProvider._();
 
-final class FestivalAreaDataProvider
-    extends $AsyncNotifierProvider<FestivalAreaData, FestivalArea> {
-  FestivalAreaDataProvider._(
-      {required FestivalAreaDataFamily super.from,
-      required LatLng super.argument})
+final class FestivalAreaDataProvider extends $FunctionalProvider<
+        AsyncValue<FestivalArea>, FestivalArea, FutureOr<FestivalArea>>
+    with $FutureModifier<FestivalArea>, $FutureProvider<FestivalArea> {
+  FestivalAreaDataProvider._()
       : super(
+          from: null,
+          argument: null,
           retry: null,
           name: r'festivalAreaDataProvider',
-          isAutoDispose: true,
+          isAutoDispose: false,
           dependencies: null,
           $allTransitiveDependencies: null,
         );
@@ -72,72 +73,16 @@ final class FestivalAreaDataProvider
   @override
   String debugGetCreateSourceHash() => _$festivalAreaDataHash();
 
-  @override
-  String toString() {
-    return r'festivalAreaDataProvider'
-        ''
-        '($argument)';
-  }
-
   @$internal
   @override
-  FestivalAreaData create() => FestivalAreaData();
+  $FutureProviderElement<FestivalArea> $createElement(
+          $ProviderPointer pointer) =>
+      $FutureProviderElement(pointer);
 
   @override
-  bool operator ==(Object other) {
-    return other is FestivalAreaDataProvider && other.argument == argument;
-  }
-
-  @override
-  int get hashCode {
-    return argument.hashCode;
+  FutureOr<FestivalArea> create(Ref ref) {
+    return festivalAreaData(ref);
   }
 }
 
-String _$festivalAreaDataHash() => r'7e566722e44def2083f95b6022b0a7ceb6c4000c';
-
-final class FestivalAreaDataFamily extends $Family
-    with
-        $ClassFamilyOverride<FestivalAreaData, AsyncValue<FestivalArea>,
-            FestivalArea, FutureOr<FestivalArea>, LatLng> {
-  FestivalAreaDataFamily._()
-      : super(
-          retry: null,
-          name: r'festivalAreaDataProvider',
-          dependencies: null,
-          $allTransitiveDependencies: null,
-          isAutoDispose: true,
-        );
-
-  FestivalAreaDataProvider call(
-    LatLng center,
-  ) =>
-      FestivalAreaDataProvider._(argument: center, from: this);
-
-  @override
-  String toString() => r'festivalAreaDataProvider';
-}
-
-abstract class _$FestivalAreaData extends $AsyncNotifier<FestivalArea> {
-  late final _$args = ref.$arg as LatLng;
-  LatLng get center => _$args;
-
-  FutureOr<FestivalArea> build(
-    LatLng center,
-  );
-  @$mustCallSuper
-  @override
-  void runBuild() {
-    final ref = this.ref as $Ref<AsyncValue<FestivalArea>, FestivalArea>;
-    final element = ref.element as $ClassProviderElement<
-        AnyNotifier<AsyncValue<FestivalArea>, FestivalArea>,
-        AsyncValue<FestivalArea>,
-        Object?,
-        Object?>;
-    element.handleCreate(
-        ref,
-        () => build(
-              _$args,
-            ));
-  }
-}
+String _$festivalAreaDataHash() => r'a80889fe3281c16dea74813db01bc2185b59bf2a';
