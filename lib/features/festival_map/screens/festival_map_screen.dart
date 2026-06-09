@@ -1,7 +1,4 @@
-import 'dart:ui' as ui;
-
 import 'package:flutter/material.dart';
-import 'package:flutter/rendering.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
@@ -9,6 +6,12 @@ import 'package:google_maps_flutter/google_maps_flutter.dart';
 import '../models/stage-area.dart';
 import '../providers/location_provider.dart';
 import '../providers/stage_area_provider.dart';
+import '../widgets/festival_google_map.dart';
+import '../widgets/festival_header_card.dart';
+import '../widgets/festival_info_sheet.dart';
+import '../widgets/location_permission_view.dart';
+import '../widgets/map_error_views.dart';
+import '../widgets/point_of_interest_info_sheet.dart';
 
 class FestivalMapScreen extends ConsumerStatefulWidget {
   const FestivalMapScreen({super.key});
@@ -18,251 +21,203 @@ class FestivalMapScreen extends ConsumerStatefulWidget {
 }
 
 class _FestivalMapScreenState extends ConsumerState<FestivalMapScreen> {
+  GoogleMapController? _controller;
+  bool _cameraMovedToUser = false;
+
   @override
   Widget build(BuildContext context) {
     final permission = ref.watch(locationPermissionProvider);
 
     return permission.when(
       loading: () => const Center(child: CircularProgressIndicator()),
-      error: (_, __) => const _LocationErrorView(),
+      error: (_, __) => const LocationErrorView(),
       data: (permission) {
         if (permission == LocationPermission.denied ||
             permission == LocationPermission.deniedForever) {
-          return const _LocationPermissionView();
+          return const LocationPermissionView();
         }
 
-        return const _FestivalMapBody();
+        return _FestivalMapBody(
+          controller: _controller,
+          cameraMovedToUser: _cameraMovedToUser,
+          onControllerCreated: (controller) {
+            _controller = controller;
+          },
+          onCameraMovedToUser: () {
+            _cameraMovedToUser = true;
+          },
+          onFocusFestival: _focusFestival,
+          onFocusPointOfInterest: _focusPointOfInterest,
+          onShowFestivalInfo: _showFestivalInfo,
+          onShowPointOfInterestInfo: _showPointOfInterestInfo,
+        );
       },
     );
   }
-}
 
-class _FestivalMapBody extends ConsumerStatefulWidget {
-  const _FestivalMapBody();
-
-  @override
-  ConsumerState<_FestivalMapBody> createState() => _FestivalMapBodyState();
-}
-
-class _FestivalMapBodyState extends ConsumerState<_FestivalMapBody> {
-  GoogleMapController? _controller;
-  bool _cameraMovedToUser = false;
-  LatLng? _festivalCenter;
-  final Map<String, BitmapDescriptor> _labelIcons = {};
-
-  @override
-  Widget build(BuildContext context) {
-    final location = ref.watch(userLocationStreamProvider);
-
-    return location.when(
-      loading: () => const Center(child: CircularProgressIndicator()),
-      error: (_, __) => const _LocationErrorView(),
-      data: (position) {
-        final currentLocation = LatLng(position.latitude, position.longitude);
-        _festivalCenter ??= currentLocation;
-
-        final festivalArea = ref.watch(festivalAreaDataProvider(_festivalCenter!));
-
-        if (!_cameraMovedToUser) {
-          _cameraMovedToUser = true;
-          WidgetsBinding.instance.addPostFrameCallback((_) {
-            _controller?.animateCamera(
-              CameraUpdate.newLatLngZoom(currentLocation, 16),
-            );
-          });
-        }
-
-        return festivalArea.when(
-          loading: () => GoogleMap(
-            initialCameraPosition: CameraPosition(
-              target: currentLocation,
-              zoom: 16,
-            ),
-            onMapCreated: (controller) {
-              _controller = controller;
-            },
-            myLocationEnabled: true,
-            myLocationButtonEnabled: true,
-            compassEnabled: true,
-            zoomControlsEnabled: false,
-            mapToolbarEnabled: false,
-          ),
-          error: (_, __) => const _LocationErrorView(),
-          data: (area) {
-            _createMissingLabelIcons(area.stages);
-
-            return GoogleMap(
-              initialCameraPosition: CameraPosition(
-                target: currentLocation,
-                zoom: 16,
-              ),
-              onMapCreated: (controller) {
-                _controller = controller;
-              },
-              myLocationEnabled: true,
-              myLocationButtonEnabled: true,
-              compassEnabled: true,
-              zoomControlsEnabled: false,
-              mapToolbarEnabled: false,
-              polygons: {
-                Polygon(
-                  polygonId: PolygonId(area.id),
-                  points: area.points,
-                  fillColor: area.color.withOpacity(0.12),
-                  strokeColor: area.color.withOpacity(0.9),
-                  strokeWidth: 5,
-                ),
-                ...area.stages.map((stage) {
-                  return Polygon(
-                    polygonId: PolygonId(stage.id),
-                    points: stage.points,
-                    fillColor: stage.color.withOpacity(0.38),
-                    strokeColor: stage.color,
-                    strokeWidth: 4,
-                  );
-                }),
-              },
-              markers: {
-                Marker(
-                  markerId: MarkerId('${area.id}_label'),
-                  position: area.center,
-                  icon: BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueAzure),
-                  infoWindow: InfoWindow(
-                    title: area.name,
-                  ),
-                ),
-                ...area.stages.map((stage) {
-                  return Marker(
-                    markerId: MarkerId('${stage.id}_label'),
-                    position: stage.center,
-                    icon: _labelIcons[stage.id] ?? BitmapDescriptor.defaultMarkerWithHue(_markerHue(stage.color)),
-                    anchor: const Offset(0.5, 0.5),
-                    infoWindow: InfoWindow(
-                      title: stage.name,
-                    ),
-                  );
-                }),
-              },
-            );
+  void _showFestivalInfo(FestivalArea area) {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      useSafeArea: true,
+      backgroundColor: Colors.transparent,
+      builder: (context) {
+        return FestivalInfoSheet(
+          area: area,
+          onGoToFestival: () {
+            Navigator.of(context).pop();
+            _focusFestival(area);
           },
         );
       },
     );
   }
 
-  void _createMissingLabelIcons(List<StageArea> stages) {
-    for (final stage in stages) {
-      if (_labelIcons.containsKey(stage.id)) {
-        continue;
-      }
+  void _showPointOfInterestInfo(PointOfInterest pointOfInterest) {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      useSafeArea: true,
+      backgroundColor: Colors.transparent,
+      builder: (context) {
+        return PointOfInterestInfoSheet(pointOfInterest: pointOfInterest);
+      },
+    );
+  }
 
-      _createLabelIcon(stage.name, stage.color).then((icon) {
-        if (!mounted) {
-          return;
-        }
+  Future<void> _focusFestival(FestivalArea area) async {
+    final controller = _controller;
 
-        setState(() {
-          _labelIcons[stage.id] = icon;
-        });
-      });
+    if (controller == null) {
+      return;
     }
-  }
 
-  Future<BitmapDescriptor> _createLabelIcon(String text, Color color) async {
-    final recorder = ui.PictureRecorder();
-    final canvas = Canvas(recorder);
-
-    const paddingHorizontal = 18.0;
-    const paddingVertical = 10.0;
-    const pointerHeight = 8.0;
-    const borderRadius = 18.0;
-
-    final textPainter = TextPainter(
-      text: TextSpan(
-        text: text,
-        style: const TextStyle(
-          color: Colors.white,
-          fontSize: 10,
-          fontWeight: FontWeight.w700,
-        ),
+    await controller.animateCamera(
+      CameraUpdate.newLatLngBounds(
+        _boundsFromPoints(area.points),
+        80,
       ),
-      textDirection: TextDirection.ltr,
-    )..layout();
-
-    final width = textPainter.width + paddingHorizontal * 2;
-    final height = textPainter.height + paddingVertical * 2 + pointerHeight;
-
-    final paint = Paint()..color = color.withOpacity(0.95);
-
-    final bubbleRect = RRect.fromRectAndRadius(
-      Rect.fromLTWH(0, 0, width, height - pointerHeight),
-      const Radius.circular(borderRadius),
-    );
-
-    canvas.drawRRect(bubbleRect, paint);
-
-    final pointerPath = Path()
-      ..moveTo(width / 2 - 8, height - pointerHeight)
-      ..lineTo(width / 2, height)
-      ..lineTo(width / 2 + 8, height - pointerHeight)
-      ..close();
-
-    canvas.drawPath(pointerPath, paint);
-
-    textPainter.paint(
-      canvas,
-      Offset(
-        paddingHorizontal,
-        paddingVertical,
-      ),
-    );
-
-    final image = await recorder.endRecording().toImage(
-      width.ceil(),
-      height.ceil(),
-    );
-
-    final bytes = await image.toByteData(
-      format: ui.ImageByteFormat.png,
-    );
-
-    return BitmapDescriptor.bytes(
-      bytes!.buffer.asUint8List(),
     );
   }
 
-  double _markerHue(Color color) {
-    return HSVColor.fromColor(color).hue;
+  Future<void> _focusPointOfInterest(PointOfInterest pointOfInterest) async {
+    final controller = _controller;
+
+    if (controller == null) {
+      return;
+    }
+
+    await controller.animateCamera(
+      CameraUpdate.newLatLngZoom(
+        pointOfInterest.location,
+        18,
+      ),
+    );
+  }
+
+  LatLngBounds _boundsFromPoints(List<LatLng> points) {
+    var south = points.first.latitude;
+    var north = points.first.latitude;
+    var west = points.first.longitude;
+    var east = points.first.longitude;
+
+    for (final point in points) {
+      south = point.latitude < south ? point.latitude : south;
+      north = point.latitude > north ? point.latitude : north;
+      west = point.longitude < west ? point.longitude : west;
+      east = point.longitude > east ? point.longitude : east;
+    }
+
+    return LatLngBounds(
+      southwest: LatLng(south, west),
+      northeast: LatLng(north, east),
+    );
   }
 }
 
-class _LocationPermissionView extends ConsumerWidget {
-  const _LocationPermissionView();
+class _FestivalMapBody extends ConsumerWidget {
+  final GoogleMapController? controller;
+  final bool cameraMovedToUser;
+  final ValueChanged<GoogleMapController> onControllerCreated;
+  final VoidCallback onCameraMovedToUser;
+  final ValueChanged<FestivalArea> onFocusFestival;
+  final ValueChanged<PointOfInterest> onFocusPointOfInterest;
+  final ValueChanged<FestivalArea> onShowFestivalInfo;
+  final ValueChanged<PointOfInterest> onShowPointOfInterestInfo;
+
+  const _FestivalMapBody({
+    required this.controller,
+    required this.cameraMovedToUser,
+    required this.onControllerCreated,
+    required this.onCameraMovedToUser,
+    required this.onFocusFestival,
+    required this.onFocusPointOfInterest,
+    required this.onShowFestivalInfo,
+    required this.onShowPointOfInterestInfo,
+  });
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    return Center(
-      child: Padding(
-        padding: const EdgeInsets.all(24),
-        child: FilledButton.icon(
-          onPressed: () {
-            ref.invalidate(locationPermissionProvider);
+    final location = ref.watch(userLocationStreamProvider);
+    final festivalArea = ref.watch(festivalAreaDataProvider);
+
+    return Stack(
+      children: [
+        location.when(
+          loading: () => const Center(child: CircularProgressIndicator()),
+          error: (_, __) => const LocationErrorView(),
+          data: (position) {
+            final currentLocation = LatLng(
+              position.latitude,
+              position.longitude,
+            );
+
+            if (!cameraMovedToUser) {
+              onCameraMovedToUser();
+
+              WidgetsBinding.instance.addPostFrameCallback((_) {
+                controller?.animateCamera(
+                  CameraUpdate.newLatLngZoom(currentLocation, 16),
+                );
+              });
+            }
+
+            return festivalArea.when(
+              loading: () => FestivalGoogleMap.loading(
+                currentLocation: currentLocation,
+                onMapCreated: onControllerCreated,
+              ),
+              error: (error, _) => FestivalErrorView(error: error),
+              data: (area) {
+                return FestivalGoogleMap(
+                  currentLocation: currentLocation,
+                  area: area,
+                  onMapCreated: onControllerCreated,
+                  onPointOfInterestTap: (pointOfInterest) {
+                    onFocusPointOfInterest(pointOfInterest);
+                    onShowPointOfInterestInfo(pointOfInterest);
+                  },
+                );
+              },
+            );
           },
-          icon: const Icon(Icons.location_on_outlined),
-          label: const Text('Allow location access'),
         ),
-      ),
-    );
-  }
-}
-
-class _LocationErrorView extends StatelessWidget {
-  const _LocationErrorView();
-
-  @override
-  Widget build(BuildContext context) {
-    return const Center(
-      child: Text('Location could not be loaded'),
+        festivalArea.when(
+          loading: () => const SizedBox.shrink(),
+          error: (_, __) => const SizedBox.shrink(),
+          data: (area) {
+            return Positioned(
+              top: 16,
+              left: 16,
+              right: 16,
+              child: FestivalHeaderCard(
+                area: area,
+                onTap: () => onShowFestivalInfo(area),
+              ),
+            );
+          },
+        ),
+      ],
     );
   }
 }

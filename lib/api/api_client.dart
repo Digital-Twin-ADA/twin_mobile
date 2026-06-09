@@ -9,5 +9,4 @@ class ApiClient extends http.BaseClient {
   Future<http.StreamedResponse> send(http.BaseRequest request) {
     return _inner.send(request);
   }
-
 }
