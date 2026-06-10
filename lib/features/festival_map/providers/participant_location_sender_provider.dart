@@ -5,6 +5,7 @@ import 'dart:math' hide log;
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'package:riverpod_annotation/riverpod_annotation.dart';
 
+import '../../../api/models/send_manager_location_request.dart';
 import '../../../api/models/send_participant_location_request.dart';
 import '../../../api/providers/central_server_api_client_provider.dart';
 import '../../../shared/errors/result.dart';
@@ -56,7 +57,8 @@ class ParticipantLocationSender {
   final Random _random = Random.secure();
 
   Timer? _timer;
-  bool _isSending = false;
+  bool _isSendingCentralLocation = false;
+  bool _isSendingManagerLocation = false;
   bool _isStarting = false;
 
   FestivalArea? _festivalArea;
@@ -67,11 +69,19 @@ class ParticipantLocationSender {
 
   DateTime _lastStageChange = DateTime.fromMillisecondsSinceEpoch(0);
   DateTime _movementStartedAt = DateTime.fromMillisecondsSinceEpoch(0);
-  DateTime _lastSentAt = DateTime.fromMillisecondsSinceEpoch(0);
+  DateTime _lastCentralSentAt = DateTime.fromMillisecondsSinceEpoch(0);
+  DateTime _lastManagerSentAt = DateTime.fromMillisecondsSinceEpoch(0);
 
-  final Duration stayDuration = const Duration(seconds: 7);
+  final Duration stayDuration = const Duration(seconds: 30);
   final Duration movementDuration = const Duration(seconds: 4);
-  final Duration sendInterval = const Duration(seconds: 5);
+  final Duration centralSendInterval = const Duration(seconds: 5);
+  final Duration managerSendInterval = const Duration(seconds: 3);
+
+  final Map<int, String> managerApiBaseAddresses = const {
+    1: 'https://festival-manager-vijk.onrender.com/',
+    2: 'https://festival-manager-stage-2.onrender.com/',
+    3: 'https://festival-manager-stage-3.onrender.com/',
+  };
 
   ParticipantLocationSender(this.ref);
 
@@ -101,11 +111,13 @@ class ParticipantLocationSender {
 
       log('ParticipantLocationSender started');
 
-      await _sendCurrentLocation();
+      await _sendCentralLocation();
+      await _sendManagerLocation();
 
       _timer = Timer.periodic(interval, (_) async {
         _tick();
-        await _sendCurrentLocationIfNeeded();
+        await _sendCentralLocationIfNeeded();
+        await _sendManagerLocationIfNeeded();
       });
     } finally {
       _isStarting = false;
@@ -186,16 +198,24 @@ class ParticipantLocationSender {
     );
   }
 
-  Future<void> _sendCurrentLocationIfNeeded() async {
-    if (DateTime.now().difference(_lastSentAt) < sendInterval) {
+  Future<void> _sendCentralLocationIfNeeded() async {
+    if (DateTime.now().difference(_lastCentralSentAt) < centralSendInterval) {
       return;
     }
 
-    await _sendCurrentLocation();
+    await _sendCentralLocation();
   }
 
-  Future<void> _sendCurrentLocation() async {
-    if (_isSending) {
+  Future<void> _sendManagerLocationIfNeeded() async {
+    if (DateTime.now().difference(_lastManagerSentAt) < managerSendInterval) {
+      return;
+    }
+
+    await _sendManagerLocation();
+  }
+
+  Future<void> _sendCentralLocation() async {
+    if (_isSendingCentralLocation) {
       return;
     }
 
@@ -206,7 +226,7 @@ class ParticipantLocationSender {
       return;
     }
 
-    _isSending = true;
+    _isSendingCentralLocation = true;
 
     try {
       final participantId = await ref.read(participantIdProvider.future);
@@ -228,10 +248,10 @@ class ParticipantLocationSender {
         ),
       );
 
-      _lastSentAt = DateTime.now();
+      _lastCentralSentAt = DateTime.now();
 
       log(
-        'Simulated location sent: '
+        'Central location sent: '
             '${position.latitude}, '
             '${position.longitude}, '
             'participantId=$participantId '
@@ -239,9 +259,66 @@ class ParticipantLocationSender {
             'success=${result is Success}',
       );
     } on Exception catch (e) {
-      log('Error while sending simulated participant location $e');
+      log('Error while sending central participant location $e');
     } finally {
-      _isSending = false;
+      _isSendingCentralLocation = false;
+    }
+  }
+
+  Future<void> _sendManagerLocation() async {
+    if (_isSendingManagerLocation) {
+      return;
+    }
+
+    final position = _position;
+    final stage = _currentStage ?? _targetStage;
+
+    if (position == null || stage == null) {
+      return;
+    }
+
+    final baseAddress = managerApiBaseAddresses[stage.id];
+
+    if (baseAddress == null) {
+      log('No manager API configured for stage ${stage.id}');
+      return;
+    }
+
+    _isSendingManagerLocation = true;
+
+    try {
+      final participantId = await ref.read(participantIdProvider.future);
+
+      if (!ref.mounted) {
+        return;
+      }
+
+      final apiClient = ref.read(centralServerApiClientProvider);
+
+      final result = await apiClient.sendManagerLocation(
+        baseAddress: baseAddress,
+        request: SendManagerLocationRequest(
+          participantId: participantId,
+          latitude: position.latitude,
+          longitude: position.longitude,
+        ),
+      );
+
+      _lastManagerSentAt = DateTime.now();
+
+      log(
+        'Manager location sent: '
+            '${position.latitude}, '
+            '${position.longitude}, '
+            'participantId=$participantId '
+            'stage=${stage.id} '
+            'url=${baseAddress}api/locations '
+            'success=${result is Success}',
+      );
+    } on Exception catch (e) {
+      log('Error while sending manager participant location $e');
+    } finally {
+      _isSendingManagerLocation = false;
     }
   }
 
@@ -260,8 +337,8 @@ class ParticipantLocationSender {
     final angle = _random.nextDouble() * 2 * pi;
 
     final latitudeOffset = (radius * cos(angle)) / 111320;
-    final longitudeOffset = (radius * sin(angle)) /
-        (111320 * cos(stage.location.latitude * pi / 180));
+    final longitudeOffset =
+        (radius * sin(angle)) / (111320 * cos(stage.location.latitude * pi / 180));
 
     return LatLng(
       stage.location.latitude + latitudeOffset,
