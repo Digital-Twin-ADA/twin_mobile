@@ -32,7 +32,6 @@ abstract class StageAreaRepository {
 
 class ApiStageAreaRepository implements StageAreaRepository {
   final Ref ref;
-  final Random _random = Random(7);
 
   ApiStageAreaRepository(this.ref);
 
@@ -86,25 +85,18 @@ class ApiStageAreaRepository implements StageAreaRepository {
       festivalInfo.longitude,
     );
 
-    final stages = _createStages(center, stagesResponse);
+    final stages = _createStages(stagesResponse);
     final pointsOfInterest = _createPointsOfInterest(pointsOfInterestResponse);
     final artists = _createArtists(artistsResponse);
     final lineup = _createLineup(lineupResponse);
-    final festivalRadius = _festivalRadius(center, stages, pointsOfInterest);
-    final festivalPoints = _createFestivalAreaPoints(
-      center: center,
-      radius: festivalRadius,
-      stages: stages,
-      pointsOfInterest: pointsOfInterest,
-    );
 
     return FestivalArea(
       id: festivalInfo.id,
       name: festivalInfo.name,
       description: festivalInfo.description,
       location: center,
+      radiusMeters: _festivalRadiusMeters(center, stages, pointsOfInterest),
       color: Colors.blueAccent,
-      points: festivalPoints,
       stages: stages,
       pointsOfInterest: pointsOfInterest,
       artists: artists,
@@ -112,10 +104,7 @@ class ApiStageAreaRepository implements StageAreaRepository {
     );
   }
 
-  List<StageArea> _createStages(
-      LatLng festivalCenter,
-      List<StageResponse> stages,
-      ) {
+  List<StageArea> _createStages(List<StageResponse> stages) {
     final colors = [
       Colors.pinkAccent,
       Colors.deepPurpleAccent,
@@ -129,22 +118,17 @@ class ApiStageAreaRepository implements StageAreaRepository {
     return stages.asMap().entries.map((entry) {
       final index = entry.key;
       final stage = entry.value;
-      final location = LatLng(stage.latitude, stage.longitude);
 
       return StageArea(
         id: stage.id,
         name: stage.name,
-        location: location,
+        location: LatLng(stage.latitude, stage.longitude),
         capacity: stage.capacity,
         currentCrowd: stage.currentCrowd,
         overcrowded: stage.overcrowded,
         zoneCode: stage.zoneCode,
+        radiusMeters: 20,
         color: colors[index % colors.length],
-        points: _createOrganicAreaPoints(
-          location,
-          _stageRadius(festivalCenter, location),
-          9,
-        ),
       );
     }).toList();
   }
@@ -201,135 +185,39 @@ class ApiStageAreaRepository implements StageAreaRepository {
     }).toList();
   }
 
-  double _festivalRadius(
+  double _festivalRadiusMeters(
       LatLng center,
       List<StageArea> stages,
       List<PointOfInterest> pointsOfInterest,
       ) {
     final distances = [
-      ...stages.map((stage) => _coordinateDistance(center, stage.location)),
-      ...pointsOfInterest.map((pointOfInterest) => _coordinateDistance(center, pointOfInterest.location)),
+      ...stages.map((stage) => _distanceMeters(center, stage.location) + stage.radiusMeters),
+      ...pointsOfInterest.map((point) => _distanceMeters(center, point.location) + 20),
     ];
 
     if (distances.isEmpty) {
-      return 0.006;
+      return 160;
     }
 
-    final maxDistance = distances.reduce(max);
-
-    return max(
-      0.006,
-      maxDistance * 3 + 0.004,
-    );
+    return max(160, distances.reduce(max) + 90);
   }
 
-  double _stageRadius(LatLng festivalCenter, LatLng stageCenter) {
-    final distanceFromCenter = _coordinateDistance(festivalCenter, stageCenter);
-    return max(0.00022, min(0.0005, distanceFromCenter * 0.32));
+  double _distanceMeters(LatLng a, LatLng b) {
+    const earthRadius = 6371000.0;
+
+    final dLat = _degreesToRadians(b.latitude - a.latitude);
+    final dLng = _degreesToRadians(b.longitude - a.longitude);
+
+    final lat1 = _degreesToRadians(a.latitude);
+    final lat2 = _degreesToRadians(b.latitude);
+
+    final h = sin(dLat / 2) * sin(dLat / 2) +
+        cos(lat1) * cos(lat2) * sin(dLng / 2) * sin(dLng / 2);
+
+    return 2 * earthRadius * atan2(sqrt(h), sqrt(1 - h));
   }
 
-  List<LatLng> _createFestivalAreaPoints({
-    required LatLng center,
-    required double radius,
-    required List<StageArea> stages,
-    required List<PointOfInterest> pointsOfInterest,
-  }) {
-    final points = _createOrganicAreaPoints(center, radius, 22);
-
-    final requiredPoints = [
-      ...stages.expand((stage) => stage.points),
-      ...pointsOfInterest.map((pointOfInterest) => pointOfInterest.location),
-    ];
-
-    for (final requiredPoint in requiredPoints) {
-      if (!_isPointInsidePolygon(requiredPoint, points)) {
-        final angle = atan2(
-          requiredPoint.longitude - center.longitude,
-          requiredPoint.latitude - center.latitude,
-        );
-
-        points.add(
-          LatLng(
-            center.latitude + cos(angle) * radius * 1.18,
-            center.longitude + sin(angle) * radius * 1.18,
-          ),
-        );
-      }
-    }
-
-    points.sort((a, b) {
-      final angleA = atan2(
-        a.longitude - center.longitude,
-        a.latitude - center.latitude,
-      );
-
-      final angleB = atan2(
-        b.longitude - center.longitude,
-        b.latitude - center.latitude,
-      );
-
-      return angleA.compareTo(angleB);
-    });
-
-    return points;
-  }
-
-  List<LatLng> _createOrganicAreaPoints(
-      LatLng center,
-      double radius,
-      int sides,
-      ) {
-    final startAngle = _random.nextDouble() * 2 * pi;
-
-    final angles = List.generate(sides, (index) {
-      final baseAngle = startAngle + (2 * pi * index) / sides;
-      final angleShift = (_random.nextDouble() - 0.5) * 0.35;
-
-      return baseAngle + angleShift;
-    })..sort();
-
-    return angles.map((angle) {
-      final radiusVariation = 0.65 + _random.nextDouble() * 0.7;
-      final latitudeStretch = 0.9 + _random.nextDouble() * 0.22;
-      final longitudeStretch = 0.9 + _random.nextDouble() * 0.22;
-
-      return LatLng(
-        center.latitude +
-            cos(angle) * radius * radiusVariation * latitudeStretch,
-        center.longitude +
-            sin(angle) * radius * radiusVariation * longitudeStretch,
-      );
-    }).toList();
-  }
-
-  bool _isPointInsidePolygon(LatLng point, List<LatLng> polygon) {
-    var inside = false;
-
-    for (var i = 0, j = polygon.length - 1; i < polygon.length; j = i++) {
-      final xi = polygon[i].latitude;
-      final yi = polygon[i].longitude;
-      final xj = polygon[j].latitude;
-      final yj = polygon[j].longitude;
-
-      final intersects = ((yi > point.longitude) != (yj > point.longitude)) &&
-          (point.latitude <
-              (xj - xi) *
-                  (point.longitude - yi) /
-                  ((yj - yi) == 0 ? 0.0000001 : yj - yi) +
-                  xi);
-
-      if (intersects) {
-        inside = !inside;
-      }
-    }
-
-    return inside;
-  }
-
-  double _coordinateDistance(LatLng a, LatLng b) {
-    final latitudeDelta = a.latitude - b.latitude;
-    final longitudeDelta = a.longitude - b.longitude;
-
-    return sqrt(latitudeDelta * latitudeDelta + longitudeDelta * longitudeDelta);
+  double _degreesToRadians(double degrees) {
+    return degrees * pi / 180;
   }
 }
