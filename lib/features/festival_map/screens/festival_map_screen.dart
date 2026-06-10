@@ -11,6 +11,9 @@ import '../widgets/festival_info_sheet.dart';
 import '../widgets/map_error_views.dart';
 import '../widgets/point_of_interest_info_sheet.dart';
 
+import '../providers/stage_alert_provider.dart';
+import '../widgets/festival_alert_banner.dart';
+
 class FestivalMapScreen extends ConsumerStatefulWidget {
   const FestivalMapScreen({super.key});
 
@@ -143,6 +146,7 @@ class _FestivalMapBody extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final festivalArea = ref.watch(festivalAreaDataProvider);
     final simulatedLocation = ref.watch(simulatedParticipantLocationStateProvider);
+    final stageAlert = ref.watch(stageAlertProvider);
 
     return Stack(
       children: [
@@ -182,6 +186,21 @@ class _FestivalMapBody extends ConsumerWidget {
               child: FestivalHeaderCard(
                 area: area,
                 onTap: () => onShowFestivalInfo(area),
+              ),
+
+            );
+          },
+        ),
+        stageAlert.when(
+          loading: () => const SizedBox.shrink(),
+          error: (_, __) => const SizedBox.shrink(),
+          data: (alert) {
+            return Positioned(
+              top: 92,
+              left: 16,
+              right: 16,
+              child: FestivalAlertBanner(
+                alert: alert,
               ),
             );
           },
