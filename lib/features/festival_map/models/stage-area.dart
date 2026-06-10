@@ -9,7 +9,7 @@ class StageArea {
   final int currentCrowd;
   final bool overcrowded;
   final String? zoneCode;
-  final List<LatLng> points;
+  final double radiusMeters;
   final Color color;
 
   const StageArea({
@@ -20,7 +20,7 @@ class StageArea {
     required this.currentCrowd,
     required this.overcrowded,
     required this.zoneCode,
-    required this.points,
+    required this.radiusMeters,
     required this.color,
   });
 
@@ -98,7 +98,7 @@ class FestivalArea {
   final String name;
   final String description;
   final LatLng location;
-  final List<LatLng> points;
+  final double radiusMeters;
   final Color color;
   final List<StageArea> stages;
   final List<PointOfInterest> pointsOfInterest;
@@ -110,7 +110,7 @@ class FestivalArea {
     required this.name,
     required this.description,
     required this.location,
-    required this.points,
+    required this.radiusMeters,
     required this.color,
     required this.stages,
     required this.pointsOfInterest,

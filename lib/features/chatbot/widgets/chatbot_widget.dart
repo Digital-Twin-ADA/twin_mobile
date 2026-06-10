@@ -1,27 +1,72 @@
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:http/http.dart' as http;
 
-class ChatbotWidget extends StatefulWidget {
+import '../../festival_map/providers/participant_session_provider.dart';
+
+class ChatbotWidget extends ConsumerStatefulWidget {
   const ChatbotWidget({super.key});
 
   @override
-  State<ChatbotWidget> createState() => _ChatbotWidgetState();
+  ConsumerState<ChatbotWidget> createState() => _ChatbotWidgetState();
 }
 
-class _ChatbotWidgetState extends State<ChatbotWidget> {
+class _ChatbotWidgetState extends ConsumerState<ChatbotWidget> {
   final TextEditingController _controller = TextEditingController();
   final ScrollController _scrollController = ScrollController();
 
   final List<Map<String, String>> messages = [];
 
   bool isLoading = false;
+  bool hasLoadedWelcome = false;
+
+  static const String baseUrl =
+      'https://twin-talk-engine-gbayevezeehafscp.francecentral-01.azurewebsites.net';
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+
+    if (!hasLoadedWelcome) {
+      hasLoadedWelcome = true;
+      _loadWelcomeMessage();
+    }
+  }
+
+  Future<void> _loadWelcomeMessage() async {
+    final sessionId = await ref.read(participantIdProvider.future);
+    final userName = sessionId;
+
+    setState(() {
+      isLoading = true;
+    });
+
+    final response = await getWelcomeMessage(
+      sessionId: sessionId,
+      userName: userName,
+    );
+
+    setState(() {
+      messages.add({
+        'text': response,
+        'sender': 'bot',
+      });
+
+      isLoading = false;
+    });
+
+    _scrollToBottom();
+  }
 
   Future<void> _sendMessage() async {
     final text = _controller.text.trim();
 
     if (text.isEmpty || isLoading) return;
+
+    final sessionId = await ref.read(participantIdProvider.future);
+    final userName = sessionId;
 
     setState(() {
       messages.add({
@@ -36,7 +81,11 @@ class _ChatbotWidgetState extends State<ChatbotWidget> {
 
     _scrollToBottom();
 
-    final response = await getChatbotResponse(text);
+    final response = await getChatbotResponse(
+      sessionId: sessionId,
+      userName: userName,
+      message: text,
+    );
 
     setState(() {
       messages.add({
@@ -50,10 +99,11 @@ class _ChatbotWidgetState extends State<ChatbotWidget> {
     _scrollToBottom();
   }
 
-  Future<String> getChatbotResponse(String query) async {
-    final url = Uri.parse(
-      'https://twin-talk-engine-gbayevezeehafscp.francecentral-01.azurewebsites.net/chat',
-    );
+  Future<String> getWelcomeMessage({
+    required String sessionId,
+    required String userName,
+  }) async {
+    final url = Uri.parse('$baseUrl/welcome');
 
     try {
       final response = await http.post(
@@ -62,7 +112,8 @@ class _ChatbotWidgetState extends State<ChatbotWidget> {
           'Content-Type': 'application/json',
         },
         body: jsonEncode({
-          'message': query,
+          'session_id': sessionId,
+          'user_name': userName,
         }),
       );
 
@@ -70,20 +121,54 @@ class _ChatbotWidgetState extends State<ChatbotWidget> {
         return 'Server error: ${response.statusCode}';
       }
 
-      final data = jsonDecode(response.body);
-
-      if (data is Map<String, dynamic>) {
-        return data['response']?.toString() ??
-            data['answer']?.toString() ??
-            data['message']?.toString() ??
-            data['text']?.toString() ??
-            response.body;
-      }
-
-      return response.body;
+      return _extractResponseText(response.body);
     } catch (e) {
       return 'Could not connect to chatbot server.';
     }
+  }
+
+  Future<String> getChatbotResponse({
+    required String sessionId,
+    required String userName,
+    required String message,
+  }) async {
+    final url = Uri.parse('$baseUrl/chat');
+
+    try {
+      final response = await http.post(
+        url,
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: jsonEncode({
+          'session_id': sessionId,
+          'user_name': userName,
+          'message': message,
+        }),
+      );
+
+      if (response.statusCode != 200) {
+        return 'Server error: ${response.statusCode}';
+      }
+
+      return _extractResponseText(response.body);
+    } catch (e) {
+      return 'Could not connect to chatbot server.';
+    }
+  }
+
+  String _extractResponseText(String body) {
+    final data = jsonDecode(body);
+
+    if (data is Map<String, dynamic>) {
+      return data['response']?.toString() ??
+          data['answer']?.toString() ??
+          data['message']?.toString() ??
+          data['text']?.toString() ??
+          body;
+    }
+
+    return body;
   }
 
   void _scrollToBottom() {
@@ -221,7 +306,7 @@ class _ChatbotWidgetState extends State<ChatbotWidget> {
                       ),
                       const SizedBox(width: 12),
                       IconButton.filled(
-                        onPressed: _sendMessage,
+                        onPressed: isLoading ? null : _sendMessage,
                         icon: const Icon(Icons.send),
                       ),
                     ],
